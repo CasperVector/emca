@@ -4,11 +4,12 @@ EMCA: yet another ACME client (v0.1.0)
 About
 -----
 
-This is EMCA, yet another client for the ACME protocol used by the Let's
-Encrypt project.  The code is based on acme-tiny [1], and attempts to be even
+This is EMCA [1], yet another client for the ACME protocol used by the Let's
+Encrypt project.  The code is based on acme-tiny [2], and attempts to be even
 easier to audit, hack and maintain.
 
-[1] <https://github.com/diafygi/acme-tiny>.
+[1] <https://gitlab.com/CasperVector/emca>.
+[2] <https://github.com/diafygi/acme-tiny>.
 
 
 Usage
