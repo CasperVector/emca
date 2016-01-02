@@ -1,0 +1,77 @@
+EMCA: yet another ACME client (v0.1.0)
+======================================
+
+About
+-----
+
+This is EMCA, yet another client for the ACME protocol used by the Let's
+Encrypt project.  The code is based on acme-tiny [1], and attempts to be even
+easier to audit, hack and maintain.
+
+[1] <https://github.com/diafygi/acme-tiny>.
+
+
+Usage
+-----
+
+To run this script, you need Python (either 2.x or 3.x), OpenSSL (the binary
+executable file) and a working HTTP daemon.  Also modify the variables in
+emca.conf to suit your needs.
+
+Generate the keys, and place them in suitable locations with appropriate
+filenames (note that the server key should be only readable by the HTTP daemon,
+not the ACME client program; the ACME account key should be only readable by the
+ACME client program; the CSR can be globally readable, but should only be
+writable by the system administrator):
+
+$ openssl genrsa 4096 > emca.key
+$ openssl genrsa 4096 > server.key
+$ openssl req -new -sha512 -key server.key \
+    -subj '/CN=example.com/O=Example Domain' > server.csr
+
+With all files ready, register the ACME client key and prepare the intermediate
+certificates with:
+
+$ ./emca.py reg emca.conf
+$ wget -O chain.crt \
+    'https://letsencrypt.org/certs/lets-encrypt-x1-cross-signed.pem'
+
+To issue and renew your certificate (should be done at least once every 90
+days; 1 month recommended to avoid hit the rate limit on the ACME server), make
+sure the ACME challenge directory is writable by the ACME client program and
+enter-able (i.e. with the `x' permission flag enabled) by the HTTP daemon, and
+the current umask allows other users to read files created by the ACME client
+program, and then run:
+
+$ ./emca.py auth emca.conf; ./emca.py sign emca.conf > serveronly.crt
+$ cat chain.crt serveronly.crt > server.crt
+
+It is recommended to create a dedicated non-privileged user for running the
+ACME client, and only provision the ACME challenge directory temporarily (using
+some automation) when the ACME client is scheduled to run.
+
+
+Copying
+-------
+
+Copyright (c) 2015 Daniel Roesler
+Copyright (c) 2015 Casper Ti. Vector
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
