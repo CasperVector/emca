@@ -38,11 +38,11 @@ $ wget -O chain.crt \
     'https://letsencrypt.org/certs/lets-encrypt-x1-cross-signed.pem'
 
 To issue and renew your certificate (should be done at least once every 90
-days; 1 month recommended to avoid hit the rate limit on the ACME server), make
-sure the ACME challenge directory is writable by the ACME client program and
-enter-able (i.e. with the `x' permission flag enabled) by the HTTP daemon, and
-the current umask allows other users to read files created by the ACME client
-program, and then run:
+days; 1 month recommended to avoid hitting the rate limit on the ACME server),
+make sure the ACME challenge directory is writable by the ACME client program
+and enter-able (i.e. with the `x' permission flag enabled) by the HTTP daemon,
+and the current umask allows other users to read files created by the ACME
+client program, and then run:
 
 $ ./emca.py auth emca.conf; ./emca.py sign emca.conf > serveronly.crt
 $ cat chain.crt serveronly.crt > server.crt
