@@ -24,7 +24,7 @@ def my_base64(b):
 
 def my_write(f, b):
     (f if sys.version_info[0] < 3 else f.buffer).write(b + (
-        b"" if b.endswith(b"\n") or len(b) == 0 else b"\n"
+        b"" if len(b) == 0 or b[-1] == b"\n"[0] else b"\n"
     ))
 
 def my_open(*args):
