@@ -100,7 +100,7 @@ def list_domains(csr):
     m and domains.append(m.group(1).decode("UTF-8"))
     m = re.search(
         br"X509v3 Subject Alternative Name:\s+([^\n]+)\n",
-        out, re.MULTILINE
+        out, flags = re.MULTILINE
     )
     m and domains.extend(
         name[4:] for name in m.group(1).decode("UTF-8").split(", ")
