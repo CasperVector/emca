@@ -64,13 +64,13 @@ class Jws(object):
             ))
         }}
         self.thumb = my_base64(hashlib.sha256(json.dumps(
-            self.hdr["jwk"], sort_keys = True, separators = (',', ':')
-        ).encode('UTF-8')).digest())
+            self.hdr["jwk"], sort_keys = True, separators = (",", ":")
+        ).encode("UTF-8")).digest())
 
     def send(self, uri, payload):
         protected = copy.deepcopy(self.hdr)
         protected["nonce"] = \
-            my_open(self.ca + "/directory").info()['Replay-Nonce']
+            my_open(self.ca + "/directory").info()["Replay-Nonce"]
         data = {
             "header": self.hdr,
             "payload": my_base64(json.dumps(payload).encode("UTF-8")),
@@ -115,8 +115,8 @@ def auth_domain(jws, domain, acme, tries, pause):
     if returncode != 201:
         http_except(returncode, "requesting challenge")
     chal = [
-        c for c in json.loads(out.decode('UTF-8'))['challenges']
-        if c['type'] == "http-01"
+        c for c in json.loads(out.decode("UTF-8"))["challenges"]
+        if c["type"] == "http-01"
     ]
     assert len(chal) == 1
     token = chal[0]["token"]
@@ -140,7 +140,7 @@ def auth_domain(jws, domain, acme, tries, pause):
             http_except(returncode,
                 "polling challenge status for domain `%s'" % domain
             )
-        status = json.loads(out.decode('UTF-8'))['status']
+        status = json.loads(out.decode("UTF-8"))["status"]
         if status == "pending":
             time.sleep(pause)
             i -= 1
