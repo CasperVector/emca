@@ -45,7 +45,7 @@ and the current umask allows other users to read files created by the ACME
 client program, and then run:
 
 $ ./emca.py auth emca.conf; ./emca.py sign emca.conf > serveronly.crt
-$ cat chain.crt serveronly.crt > server.crt
+$ cat serveronly.crt chain.crt > server.crt
 
 It is recommended to create a dedicated non-privileged user for running the
 ACME client, and only provision the ACME challenge directory temporarily (using
