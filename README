@@ -31,11 +31,14 @@ $ openssl req -new -sha512 -key server.key \
     -subj '/CN=example.com/O=Example Domain' > server.csr
 
 With all files ready, register the ACME client key and prepare the intermediate
-certificates with:
+certificates (see also [3] for updates; if they are outdated, you will end up
+with an incomplete certificate chain) with:
 
 $ ./emca.py reg emca.conf
 $ wget -O chain.crt \
-    'https://letsencrypt.org/certs/lets-encrypt-x1-cross-signed.pem'
+    'https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem'
+
+[3] <https://letsencrypt.org/certificates/>.
 
 To issue and renew your certificate (should be done at least once every 90
 days; 1 month recommended to avoid hitting the rate limit on the ACME server),
