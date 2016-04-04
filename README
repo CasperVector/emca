@@ -17,7 +17,9 @@ Usage
 
 To run this script, you need Python (either 2.x or 3.x), OpenSSL (the binary
 executable file) and a working HTTP daemon.  Also modify the variables in
-emca.conf to suit your needs.
+emca.conf to suit your needs.  Additionally, it is strongly recommended to read
+the source code (less than 200 lines and carefully organised) of emca.py by
+yourself to be sure you trust it.
 
 Generate the keys, and place them in suitable locations with appropriate
 filenames (note that the server key should be only readable by the HTTP daemon,
