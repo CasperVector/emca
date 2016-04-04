@@ -20,7 +20,7 @@ def http_except(returncode, desc):
     raise Exception("unexpected HTTP status `%d' %s" % (returncode, desc))
 
 def my_base64(b):
-    return base64.urlsafe_b64encode(b).replace(b"=", b"").decode("UTF-8")
+    return base64.urlsafe_b64encode(b).decode("UTF-8").replace("=", "")
 
 def my_write(f, b):
     (f if sys.version_info[0] < 3 else f.buffer).write(b + (
