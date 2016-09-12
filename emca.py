@@ -16,8 +16,8 @@ else:
 def http_resp(req):
     return req.getcode(), req.info(), req.read()
 
-def http_except(returncode, desc):
-    raise Exception("unexpected HTTP status `%d' %s" % (returncode, desc))
+def http_except(ret, desc):
+    raise Exception("unexpected HTTP status `%d' %s" % (ret, desc))
 
 def my_base64(b):
     return base64.urlsafe_b64encode(b).decode("UTF-8").replace("=", "")
@@ -87,12 +87,12 @@ class Jws(object):
         return req
 
 def reg_acct(jws, agmt):
-    returncode, info, out = http_resp(jws.send(
+    ret, info, out = http_resp(jws.send(
         "/acme/new-reg", {"resource": "new-reg", "agreement": agmt}
     ))
     my_write(sys.stdout, out)
-    if returncode not in [201, 409]:
-        http_except(returncode, "in account registration")
+    if ret not in [201, 409]:
+        http_except(ret, "in account registration")
 
 def list_domains(csr):
     domains, out = [], my_run(["openssl", "req", "-in", csr, "-noout", "-text"])
@@ -109,11 +109,11 @@ def list_domains(csr):
     return domains
 
 def auth_domain(jws, domain, acme, tries, pause):
-    returncode, info, out = http_resp(jws.send("/acme/new-authz", {
+    ret, info, out = http_resp(jws.send("/acme/new-authz", {
         "resource": "new-authz", "identifier": {"type": "dns", "value": domain}
     }))
-    if returncode != 201:
-        http_except(returncode, "requesting challenge")
+    if ret != 201:
+        http_except(ret, "requesting challenge")
     chal = [
         c for c in json.loads(out.decode("UTF-8"))["challenges"]
         if c["type"] == "http-01"
@@ -125,19 +125,19 @@ def auth_domain(jws, domain, acme, tries, pause):
     path, text = os.path.join(acme, token), "%s.%s" % (token, jws.thumb)
     with open(path, "w") as f:
         f.write(text)
-    returncode, info, out = http_resp(jws.send(chal[0]["uri"], {
+    ret, info, out = http_resp(jws.send(chal[0]["uri"], {
         "resource": "challenge", "keyAuthorization": text
     }))
-    if returncode != 202:
-        http_except(returncode,
+    if ret != 202:
+        http_except(ret,
             "responding to challenge for domain `%s'" % domain
         )
 
     uri, i = info["Location"], tries
     while i != 0:
-        returncode, info, out = http_resp(my_open(uri))
-        if returncode >= 400:
-            http_except(returncode,
+        ret, info, out = http_resp(my_open(uri))
+        if ret >= 400:
+            http_except(ret,
                 "polling challenge status for domain `%s'" % domain
             )
         status = json.loads(out.decode("UTF-8"))["status"]
@@ -156,14 +156,14 @@ def auth_domain(jws, domain, acme, tries, pause):
         raise Exception("challenge time out for domain `%s'" % domain)
 
 def sign_cert(jws, csr):
-    returncode, info, out = http_resp(jws.send("/acme/new-cert", {
+    ret, info, out = http_resp(jws.send("/acme/new-cert", {
         "resource": "new-cert", "csr": my_base64(my_run([
             "openssl", "req", "-in", csr, "-outform", "DER"
         ]))
     }))
-    if returncode != 201:
+    if ret != 201:
         my_write(sys.stderr, out)
-        http_except(returncode, "signing certificate")
+        http_except(ret, "signing certificate")
     sys.stdout.write(
         "-----BEGIN CERTIFICATE-----\n%s\n-----END CERTIFICATE-----\n" %
         "\n".join(textwrap.wrap(base64.b64encode(out).decode("UTF-8"), 64))
