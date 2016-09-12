@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# EMCA: yet another ACME client (v0.1.1)
+# EMCA: yet another ACME client (v0.1.2)
 
 from __future__ import unicode_literals
 import base64, binascii, json, os, re, sys
