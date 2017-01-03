@@ -35,11 +35,10 @@ def my_open(*args):
 
 def my_run(cmd, input = None):
     proc = subprocess.Popen(
-        cmd, stdin = None if input == None else subprocess.PIPE,
-        stdout = subprocess.PIPE, stderr = subprocess.PIPE
+        cmd, stdout = subprocess.PIPE,
+        stdin = None if input == None else subprocess.PIPE
     )
     out, err = proc.communicate(None if input == None else input)
-    my_write(sys.stderr, err)
     if proc.returncode != 0:
         raise Exception("error running command: `%s'" % " ".join(cmd))
     return out
