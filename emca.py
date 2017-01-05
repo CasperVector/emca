@@ -38,7 +38,7 @@ def my_run(cmd, input = None):
         cmd, stdout = subprocess.PIPE,
         stdin = None if input == None else subprocess.PIPE
     )
-    out, err = proc.communicate(None if input == None else input)
+    out = proc.communicate(None if input == None else input)[0]
     if proc.returncode != 0:
         raise Exception("error running command: `%s'" % " ".join(cmd))
     return out
