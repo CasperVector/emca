@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python
 # EMCA: yet another ACME client (v0.1.2)
 
 from __future__ import unicode_literals
