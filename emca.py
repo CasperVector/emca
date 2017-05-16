@@ -95,7 +95,7 @@ def reg_acct(jws, agmt):
 
 def list_domains(csr):
     domains, out = [], my_run(["openssl", "req", "-in", csr, "-noout", "-text"])
-    m = re.search(br"Subject:.*? CN=([^\s,;/]+)", out)
+    m = re.search(br"Subject:.*? CN *= *([^\s,;/]+)", out)
     m and domains.append(m.group(1).decode("UTF-8"))
     m = re.search(
         br"X509v3 Subject Alternative Name:\s+([^\n]+)\n",
