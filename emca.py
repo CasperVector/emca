@@ -43,51 +43,50 @@ def my_run(cmd, input = None):
         raise Exception("error running command: `%s'" % " ".join(cmd))
     return out
 
-class Jws(object):
-    def __init__(self, ca, acct):
-        self.ca, self.acct = ca, acct
+def jws_mk(ca, acct):
+    jws = {"ca": ca, "acct": acct}
+    out = re.sub(r":\n\s+", ":", my_run([
+        "openssl", "rsa", "-in", jws["acct"], "-noout", "-text"
+    ]).decode("UTF-8"))
+    n, e = [re.search(pat, out).group(1) for pat in [
+        r"modulus:(?:00:)*([0-9a-f:]+)", r"publicExponent: ([0-9]+)"
+    ]]
+    e = "%x" % int(e)
 
-        out = re.sub(r":\n\s+", ":", my_run([
-            "openssl", "rsa", "-in", self.acct, "-noout", "-text"
-        ]).decode("UTF-8"))
-        n, e = [re.search(pat, out).group(1) for pat in [
-            r"modulus:(?:00:)*([0-9a-f:]+)", r"publicExponent: ([0-9]+)"
-        ]]
-        e = "%x" % int(e)
-
-        self.hdr = {"alg": "RS256", "jwk": {
-            "kty": "RSA", "n": my_base64(binascii.unhexlify(
-                n.replace(":", "").encode("UTF-8")
-            )), "e": my_base64(binascii.unhexlify(
-                ("0" * (len(e) % 2) + e).encode("UTF-8")
-            ))
-        }}
-        self.thumb = my_base64(hashlib.sha256(json.dumps(
-            self.hdr["jwk"], sort_keys = True, separators = (",", ":")
-        ).encode("UTF-8")).digest())
-
-    def send(self, uri, payload):
-        protected = copy.deepcopy(self.hdr)
-        protected["nonce"] = \
-            my_open(self.ca + "/directory").info()["Replay-Nonce"]
-        data = {
-            "header": self.hdr,
-            "payload": my_base64(json.dumps(payload).encode("UTF-8")),
-            "protected": my_base64(json.dumps(protected).encode("UTF-8"))
-        }
-        data["signature"] = my_base64(my_run(
-            ["openssl", "dgst", "-sha256", "-sign", self.acct],
-            ("%s.%s" % (data["protected"], data["payload"])).encode("UTF-8")
+    jws["hdr"] = {"alg": "RS256", "jwk": {
+        "kty": "RSA", "n": my_base64(binascii.unhexlify(
+            n.replace(":", "").encode("UTF-8")
+        )), "e": my_base64(binascii.unhexlify(
+            ("0" * (len(e) % 2) + e).encode("UTF-8")
         ))
-        req = my_open(
-            self.ca + uri if uri.startswith("/") else uri,
-            json.dumps(data).encode("UTF-8")
-        )
-        return req
+    }}
+    jws["thumb"] = my_base64(hashlib.sha256(json.dumps(
+        jws["hdr"]["jwk"], sort_keys = True, separators = (",", ":")
+    ).encode("UTF-8")).digest())
+    return jws
+
+def jws_send(jws, uri, payload):
+    protected = copy.deepcopy(jws["hdr"])
+    protected["nonce"] = \
+        my_open(jws["ca"] + "/directory").info()["Replay-Nonce"]
+    data = {
+        "header": jws["hdr"],
+        "payload": my_base64(json.dumps(payload).encode("UTF-8")),
+        "protected": my_base64(json.dumps(protected).encode("UTF-8"))
+    }
+    data["signature"] = my_base64(my_run(
+        ["openssl", "dgst", "-sha256", "-sign", jws["acct"]],
+        ("%s.%s" % (data["protected"], data["payload"])).encode("UTF-8")
+    ))
+    req = my_open(
+        jws["ca"] + uri if uri.startswith("/") else uri,
+        json.dumps(data).encode("UTF-8")
+    )
+    return req
 
 def reg_acct(jws, agmt):
-    ret, info, out = http_resp(jws.send(
-        "/acme/new-reg", {"resource": "new-reg", "agreement": agmt}
+    ret, info, out = http_resp(jws_send(
+        jws, "/acme/new-reg", {"resource": "new-reg", "agreement": agmt}
     ))
     my_write(sys.stdout, out)
     if ret not in [201, 409]:
@@ -108,7 +107,7 @@ def list_domains(csr):
     return domains
 
 def auth_domain(jws, domain, acme, tries, pause):
-    ret, info, out = http_resp(jws.send("/acme/new-authz", {
+    ret, info, out = http_resp(jws_send(jws, "/acme/new-authz", {
         "resource": "new-authz", "identifier": {"type": "dns", "value": domain}
     }))
     if ret != 201:
@@ -121,10 +120,10 @@ def auth_domain(jws, domain, acme, tries, pause):
     token = chal[0]["token"]
     assert not re.search(r"[^A-Za-z0-9_-]", token)
 
-    path, text = os.path.join(acme, token), "%s.%s" % (token, jws.thumb)
+    path, text = os.path.join(acme, token), "%s.%s" % (token, jws["thumb"])
     with open(path, "w") as f:
         f.write(text)
-    ret, info, out = http_resp(jws.send(chal[0]["uri"], {
+    ret, info, out = http_resp(jws_send(jws, chal[0]["uri"], {
         "resource": "challenge", "keyAuthorization": text
     }))
     if ret != 202:
@@ -155,7 +154,7 @@ def auth_domain(jws, domain, acme, tries, pause):
         raise Exception("challenge time out for domain `%s'" % domain)
 
 def sign_cert(jws, csr):
-    ret, info, out = http_resp(jws.send("/acme/new-cert", {
+    ret, info, out = http_resp(jws_send(jws, "/acme/new-cert", {
         "resource": "new-cert", "csr": my_base64(my_run([
             "openssl", "req", "-in", csr, "-outform", "DER"
         ]))
@@ -176,7 +175,7 @@ def main(argv):
     cfg = ConfigParser()
     cfg.read(argv[2])
     cfg = dict(cfg.items("emca"))
-    jws = Jws(cfg["ca"], cfg["acct"])
+    jws = jws_mk(cfg["ca"], cfg["acct"])
 
     if argv[1] == "reg":
         reg_acct(jws, cfg["agmt"])
