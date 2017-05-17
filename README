@@ -27,8 +27,7 @@ not the ACME client program; the ACME account key should be only readable by the
 ACME client program; the CSR can be globally readable, but should only be
 writable by the system administrator):
 
-$ openssl genrsa 4096 > emca.key
-$ openssl genrsa 4096 > server.key
+$ openssl genrsa 4096 > emca.key; openssl genrsa 4096 > server.key
 $ openssl req -new -sha512 -key server.key \
     -subj '/CN=example.com/O=Example Domain' > server.csr
 
