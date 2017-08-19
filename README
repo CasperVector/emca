@@ -28,8 +28,7 @@ ACME client program; the CSR can be globally readable, but should only be
 writable by the system administrator):
 
 $ openssl genrsa 4096 > emca.key; openssl genrsa 4096 > server.key
-$ openssl req -new -sha512 -key server.key \
-    -subj '/CN=example.com/O=Example Domain' > server.csr
+$ openssl req -new -sha512 -key server.key -subj '/CN=example.com' > server.csr
 
 With all files ready, register the ACME client key and prepare the intermediate
 certificates (see [3] for updates; if they are outdated, you will end up with
