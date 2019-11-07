@@ -8,7 +8,7 @@ This is emca [1], yet another client for the ACME protocol used by the Let's
 Encrypt project.  The code is based on acme-tiny [2], and attempts to be even
 easier to audit, hack and maintain.
 
-[1] <https://gitlab.com/CasperVector/emca>.
+[1] <https://gitea.com/CasperVector/emca>.
 [2] <https://github.com/diafygi/acme-tiny>.
 
 
