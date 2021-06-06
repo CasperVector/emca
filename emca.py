@@ -13,12 +13,6 @@ else:
     from urllib.request import urlopen
     from urllib.error import HTTPError
 
-def http_resp(req):
-    return req.getcode(), req.info(), req.read()
-
-def http_except(ret, desc):
-    raise Exception("unexpected HTTP status `%d' %s" % (ret, desc))
-
 def my_base64(b):
     return base64.urlsafe_b64encode(b).decode("UTF-8").replace("=", "")
 
@@ -33,6 +27,19 @@ def my_open(*args):
     except HTTPError as e:
         return e
 
+def http_resp(req):
+    return req.getcode(), req.info(), req.read()
+
+def http_except(out, ret, desc):
+    my_write(sys.stderr, out)
+    raise Exception("unexpected HTTP status `%d' %s" % (ret, desc))
+
+def http_chk(codes, desc, req):
+    ret, info, out = http_resp(req)
+    if ret not in codes:
+        http_except(out, ret, desc)
+    return info, out
+
 def my_run(cmd, input = None):
     proc = subprocess.Popen(
         cmd, stdout = subprocess.PIPE,
@@ -45,11 +52,11 @@ def my_run(cmd, input = None):
 
 def jws_mk(ca, acct):
     jws = {"ca": ca, "acct": acct}
-    out = re.sub(r":\n\s+", ": ", my_run([
+    out = re.sub(r":\n\s+", ":", re.sub(r":\s+", ":", my_run([
         "openssl", "rsa", "-in", jws["acct"], "-noout", "-text"
-    ]).decode("UTF-8"))
+    ]).decode("UTF-8")))
     n, e = [re.search(pat, out).group(1) for pat in [
-        r"modulus: (?:00:)*([0-9a-f:]+)", r"publicExponent: ([0-9]+)"
+        r"modulus:(?:00:)*([0-9a-f:]+)", r"publicExponent:([0-9]+)"
     ]]
     e = "%x" % int(e)
 
@@ -85,12 +92,9 @@ def jws_send(jws, uri, payload):
     return req
 
 def reg_acct(jws, agmt):
-    ret, info, out = http_resp(jws_send(
+    http_chk([201, 409], "in account registration", jws_send(
         jws, "/acme/new-reg", {"resource": "new-reg", "agreement": agmt}
     ))
-    my_write(sys.stdout, out)
-    if ret not in [201, 409]:
-        http_except(ret, "in account registration")
 
 def list_domains(csr):
     domains, out = [], my_run(["openssl", "req", "-in", csr, "-noout", "-text"])
@@ -107,11 +111,9 @@ def list_domains(csr):
     return domains
 
 def auth_domain(jws, domain, acme, tries, pause):
-    ret, info, out = http_resp(jws_send(jws, "/acme/new-authz", {
-        "resource": "new-authz", "identifier": {"type": "dns", "value": domain}
-    }))
-    if ret != 201:
-        http_except(ret, "requesting challenge")
+    info, out = http_chk([201], "requesting challenge", jws_send(
+        jws, "/acme/new-authz", {"resource": "new-authz",
+            "identifier": {"type": "dns", "value": domain}}))
     chal = [
         c for c in json.loads(out.decode("UTF-8"))["challenges"]
         if c["type"] == "http-01"
@@ -122,19 +124,16 @@ def auth_domain(jws, domain, acme, tries, pause):
     path, text = os.path.join(acme, token), "%s.%s" % (token, jws["thumb"])
     with open(path, "w") as f:
         f.write(text)
-    ret, info, out = http_resp(jws_send(jws, chal[0]["uri"], {
-        "resource": "challenge", "keyAuthorization": text
-    }))
-    if ret != 202:
-        http_except(ret,
-            "responding to challenge for domain `%s'" % domain
-        )
+    info, out = http_chk(
+        [202], "responding to challenge for domain `%s'" % domain,
+        jws_send(jws, chal[0]["uri"],
+            {"resource": "challenge", "keyAuthorization": text}))
 
     uri, i = info["Location"], tries
     while i != 0:
         ret, info, out = http_resp(my_open(uri))
         if ret >= 400:
-            http_except(ret,
+            http_except(out, ret,
                 "polling challenge status for domain `%s'" % domain
             )
         status = json.loads(out.decode("UTF-8"))["status"]
@@ -153,14 +152,11 @@ def auth_domain(jws, domain, acme, tries, pause):
         raise Exception("challenge time out for domain `%s'" % domain)
 
 def sign_cert(jws, csr):
-    ret, info, out = http_resp(jws_send(jws, "/acme/new-cert", {
-        "resource": "new-cert", "csr": my_base64(my_run([
-            "openssl", "req", "-in", csr, "-outform", "DER"
-        ]))
-    }))
-    if ret != 201:
-        my_write(sys.stderr, out)
-        http_except(ret, "signing certificate")
+    info, out = http_chk([201], "signing certificate",
+        jws_send(jws, "/acme/new-cert", {
+	        "resource": "new-cert", "csr": my_base64(my_run([
+	            "openssl", "req", "-in", csr, "-outform", "DER"]))
+        }))
     sys.stdout.write(
         "-----BEGIN CERTIFICATE-----\n%s\n-----END CERTIFICATE-----\n" %
         "\n".join(textwrap.wrap(base64.b64encode(out).decode("UTF-8"), 64))
