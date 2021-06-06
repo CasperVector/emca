@@ -3,14 +3,14 @@
 
 from __future__ import unicode_literals
 import base64, binascii, json, os, re, sys
-import copy, hashlib, subprocess, time, textwrap
+import copy, hashlib, subprocess, time
 
 if sys.version_info[0] < 3:
     from ConfigParser import ConfigParser
-    from urllib2 import urlopen, HTTPError
+    from urllib2 import urlopen, Request, HTTPError
 else:
     from configparser import ConfigParser
-    from urllib.request import urlopen
+    from urllib.request import urlopen, Request
     from urllib.error import HTTPError
 
 def my_base64(b):
@@ -21,24 +21,21 @@ def my_write(f, b):
         b"" if len(b) == 0 or b[-1] == b"\n"[0] else b"\n"
     ))
 
-def my_open(*args):
+def my_err(out, desc):
+    my_write(sys.stderr, out)
+    raise Exception(desc)
+
+def my_open(req):
     try:
-        return urlopen(*args)
+        return urlopen(req)
     except HTTPError as e:
         return e
 
-def http_resp(req):
-    return req.getcode(), req.info(), req.read()
-
-def http_except(out, ret, desc):
-    my_write(sys.stderr, out)
-    raise Exception("unexpected HTTP status `%d' %s" % (ret, desc))
-
-def http_chk(codes, desc, req):
-    ret, info, out = http_resp(req)
-    if ret not in codes:
-        http_except(out, ret, desc)
-    return info, out
+def http_chk(desc, req, decode = True):
+    ret, info, out = req.getcode(), req.info(), req.read()
+    if ret not in [200, 201]:
+        my_err(out, "unexpected HTTP status `%d' %s" % (ret, desc))
+    return info, json.loads(out.decode("UTF-8")) if decode else out
 
 def my_run(cmd, input = None):
     proc = subprocess.Popen(
@@ -50,8 +47,8 @@ def my_run(cmd, input = None):
         raise Exception("error running command: `%s'" % " ".join(cmd))
     return out
 
-def jws_mk(ca, acct):
-    jws = {"ca": ca, "acct": acct}
+def jws_mk(acct):
+    jws = {"acct": acct}
     out = re.sub(r":\n\s+", ":", re.sub(r":\s+", ":", my_run([
         "openssl", "rsa", "-in", jws["acct"], "-noout", "-text"
     ]).decode("UTF-8")))
@@ -72,31 +69,47 @@ def jws_mk(ca, acct):
     ).encode("UTF-8")).digest())
     return jws
 
-def jws_send(jws, uri, payload):
+def jws_send(jws, url, payload):
     protected = copy.deepcopy(jws["hdr"])
-    protected["nonce"] = \
-        my_open(jws["ca"] + "/directory").info()["Replay-Nonce"]
+    protected.update([("url", url),
+        ("nonce", my_open(jws["ca"]["newNonce"]).info()["Replay-Nonce"])])
     data = {
-        "header": jws["hdr"],
-        "payload": my_base64(json.dumps(payload).encode("UTF-8")),
+        "payload": "" if payload == None else
+            my_base64(json.dumps(payload).encode("UTF-8")),
         "protected": my_base64(json.dumps(protected).encode("UTF-8"))
     }
     data["signature"] = my_base64(my_run(
         ["openssl", "dgst", "-sha256", "-sign", jws["acct"]],
         ("%s.%s" % (data["protected"], data["payload"])).encode("UTF-8")
     ))
-    req = my_open(
-        jws["ca"] + uri if uri.startswith("/") else uri,
-        json.dumps(data).encode("UTF-8")
-    )
-    return req
+    req = Request(url, json.dumps(data).encode("UTF-8"),
+        headers = {"Content-Type": "application/jose+json"})
+    return my_open(req)
 
-def reg_acct(jws, agmt):
-    http_chk([201, 409], "in account registration", jws_send(
-        jws, "/acme/new-reg", {"resource": "new-reg", "agreement": agmt}
-    ))
+def poll_mk(tries, pause):
+    def poll(jws, url):
+        i = tries
+        while i != 0:
+            out = http_chk("polling `%s'" % url,
+                jws_send(jws, url, None), False)[1]
+            out = json.loads(out.decode("UTF-8")), out
+            if out[0]["status"] != "pending":
+                break
+            time.sleep(pause)
+            i -= 1
+        else:
+            out[0]["status"] = "timeout"
+        return out
+    return poll
 
-def list_domains(csr):
+def reg_acct(jws, ca):
+    jws["ca"] = http_chk("loading directory", my_open(ca))[1]
+    jws["hdr"]["kid"] = http_chk("in account registration", jws_send(
+        jws, jws["ca"]["newAccount"], {"termsOfServiceAgreed": True}
+    ))[0]["Location"]
+    jws["hdr"].pop("jwk")
+
+def order_mk(jws, csr):
     domains, out = [], my_run(["openssl", "req", "-in", csr, "-noout", "-text"])
     m = re.search(br"Subject:.*? CN *= *([^\s,;/]+)", out)
     m and domains.append(m.group(1).decode("UTF-8"))
@@ -108,78 +121,54 @@ def list_domains(csr):
         name[4:] for name in m.group(1).decode("UTF-8").split(", ")
         if name.startswith("DNS:")
     )
-    return domains
+    return http_chk("requesting order", jws_send(jws, jws["ca"]["newOrder"], {
+        "identifiers": [{"type": "dns", "value": domain} for domain in domains]
+    }))[1]
 
-def auth_domain(jws, domain, acme, tries, pause):
-    info, out = http_chk([201], "requesting challenge", jws_send(
-        jws, "/acme/new-authz", {"resource": "new-authz",
-            "identifier": {"type": "dns", "value": domain}}))
-    chal = [
-        c for c in json.loads(out.decode("UTF-8"))["challenges"]
-        if c["type"] == "http-01"
-    ]
+def auth_domain(jws, acme, url, poll):
+    out = http_chk("requesting challenge", jws_send(jws, url, None))[1]
+    chal = [c for c in out["challenges"] if c["type"] == "http-01"]
     token = chal[0]["token"]
     assert len(chal) == 1 and not re.search(r"[^A-Za-z0-9_-]", token)
 
     path, text = os.path.join(acme, token), "%s.%s" % (token, jws["thumb"])
     with open(path, "w") as f:
         f.write(text)
-    info, out = http_chk(
-        [202], "responding to challenge for domain `%s'" % domain,
-        jws_send(jws, chal[0]["uri"],
-            {"resource": "challenge", "keyAuthorization": text}))
+    out = poll(jws, http_chk(
+        "answering challenge `%s'" % url, jws_send(jws, chal[0]["url"], {})
+    )[0]["Location"])
+    os.remove(path)
+    if out[0]["status"] != "valid":
+        my_err(out[1], "authorisation %s for `%s'" % (out[0]["status"], url))
 
-    uri, i = info["Location"], tries
-    while i != 0:
-        ret, info, out = http_resp(my_open(uri))
-        if ret >= 400:
-            http_except(out, ret,
-                "polling challenge status for domain `%s'" % domain
-            )
-        status = json.loads(out.decode("UTF-8"))["status"]
-        if status == "pending":
-            time.sleep(pause)
-            i -= 1
-        else:
-            os.remove(path)
-            my_write(sys.stdout, out)
-            if status == "valid":
-                break
-            else:
-                raise Exception("failed challenge for domain `%s'" % domain)
-    else:
-        os.remove(path)
-        raise Exception("challenge time out for domain `%s'" % domain)
-
-def sign_cert(jws, csr):
-    info, out = http_chk([201], "signing certificate",
-        jws_send(jws, "/acme/new-cert", {
-	        "resource": "new-cert", "csr": my_base64(my_run([
-	            "openssl", "req", "-in", csr, "-outform", "DER"]))
-        }))
-    sys.stdout.write(
-        "-----BEGIN CERTIFICATE-----\n%s\n-----END CERTIFICATE-----\n" %
-        "\n".join(textwrap.wrap(base64.b64encode(out).decode("UTF-8"), 64))
-    )
+def sign_cert(jws, csr, url, poll):
+    req = jws_send(jws, url, {"csr": my_base64(my_run([
+        "openssl", "req", "-in", csr, "-outform", "DER"]))})
+    out = poll(jws, http_chk("finalising certificate", req)[0]["Location"])
+    if out[0]["status"] != "valid":
+        my_err(out[1], "finalisation %s for `%s'" % (out[0]["status"], url))
+    my_write(sys.stdout, http_chk("downloading certificate",
+        jws_send(jws, out[0]["certificate"], None), False)[1])
 
 def main(argv):
-    if len(argv) != 3 or argv[1] not in ["reg", "auth", "sign"]:
-        sys.stderr.write("Usage: %s [reg | auth | sign] cfg_file\n" % argv[0])
+    if len(argv) != 2:
+        sys.stderr.write("Usage: %s cfg_file\n" % argv[0])
         sys.exit(1)
 
     cfg = ConfigParser()
-    cfg.read(argv[2])
+    cfg.read(argv[1])
     cfg = dict(cfg.items("emca"))
-    jws = jws_mk(cfg["ca"], cfg["acct"])
+    jws = jws_mk(cfg["acct"])
+    poll = poll_mk(int(cfg["tries"]), int(cfg["pause"]))
 
-    if argv[1] == "reg":
-        reg_acct(jws, cfg["agmt"])
-    elif argv[1] == "auth":
-        [auth_domain(
-            jws, domain, cfg["acme"], int(cfg["tries"]), int(cfg["pause"])
-        ) for domain in list_domains(cfg["csr"])]
-    else:
-        sign_cert(jws, cfg["csr"])
+    reg_acct(jws, cfg["ca"])
+    sys.stderr.write("account is `%s'\n" % jws["hdr"]["kid"])
+    order = order_mk(jws, cfg["csr"])
+    for url in order["authorizations"]:
+        sys.stderr.write("authorising `%s'\n" % url)
+        auth_domain(jws, cfg["acme"], url, poll)
+    sys.stderr.write("finalising `%s'\n" % order["finalize"])
+    sign_cert(jws, cfg["csr"], order["finalize"], poll)
     sys.exit(0)
 
 if __name__ == "__main__":

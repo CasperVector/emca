@@ -30,29 +30,14 @@ writable by the system administrator):
 $ openssl genrsa 4096 > emca.key; openssl genrsa 4096 > server.key
 $ openssl req -new -sha512 -key server.key -subj '/CN=example.com' > server.csr
 
-With all files ready, register the ACME client key and prepare the intermediate
-certificates (see [3] for updates; if they are outdated, you will end up with
-an incomplete certificate chain; see [4] for details on this issue) with:
-
-$ ./emca.py reg emca.conf
-$ wget -O chain.crt \
-    'https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem'
-
-[3] <https://letsencrypt.org/certificates/>.
-[4] <https://community.letsencrypt.org/t/13316/>.
-
 To issue and renew your certificate (should be done at least once every 90
 days; 1 month recommended to avoid hitting the rate limit on the ACME server),
 make sure the ACME challenge directory is writable by the ACME client program
 and enter-able (i.e. with the `x' permission flag enabled) by the HTTP daemon,
 and the current umask allows other users to read files created by the ACME
-client program, and then run (note that the order of `cat' arguments should not
-be changed; see [5] for details):
+client program; then run:
 
-$ ./emca.py auth emca.conf; ./emca.py sign emca.conf > serveronly.crt
-$ cat serveronly.crt chain.crt > server.crt
-
-[5] <https://stackoverflow.com/questions/4658484>.
+$ ./emca.py emca.conf > serveronly.crt
 
 It is recommended to create a dedicated non-privileged user for running the
 ACME client, and only provision the ACME challenge directory temporarily (using
