@@ -45,11 +45,11 @@ def my_run(cmd, input = None):
 
 def jws_mk(ca, acct):
     jws = {"ca": ca, "acct": acct}
-    out = re.sub(r":\n\s+", ":", my_run([
+    out = re.sub(r":\n\s+", ": ", my_run([
         "openssl", "rsa", "-in", jws["acct"], "-noout", "-text"
     ]).decode("UTF-8"))
     n, e = [re.search(pat, out).group(1) for pat in [
-        r"modulus:(?:00:)*([0-9a-f:]+)", r"publicExponent: ([0-9]+)"
+        r"modulus: (?:00:)*([0-9a-f:]+)", r"publicExponent: ([0-9]+)"
     ]]
     e = "%x" % int(e)
 
@@ -116,9 +116,8 @@ def auth_domain(jws, domain, acme, tries, pause):
         c for c in json.loads(out.decode("UTF-8"))["challenges"]
         if c["type"] == "http-01"
     ]
-    assert len(chal) == 1
     token = chal[0]["token"]
-    assert not re.search(r"[^A-Za-z0-9_-]", token)
+    assert len(chal) == 1 and not re.search(r"[^A-Za-z0-9_-]", token)
 
     path, text = os.path.join(acme, token), "%s.%s" % (token, jws["thumb"])
     with open(path, "w") as f:
