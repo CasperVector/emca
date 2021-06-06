@@ -1,4 +1,4 @@
-EMCA: yet another ACME client (v0.1.3)
+EMCA: yet another ACME client (v0.2.0)
 ======================================
 
 About
@@ -48,7 +48,7 @@ Copying
 -------
 
 Copyright (c) 2015 Daniel Roesler
-Copyright (c) 2015-2017 Casper Ti. Vector
+Copyright (c) 2015-2017,2021 Casper Ti. Vector
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
