@@ -37,7 +37,7 @@ and enter-able (i.e. with the `x' permission flag enabled) by the HTTP daemon,
 and the current umask allows other users to read files created by the ACME
 client program; then run:
 
-$ ./emca.py emca.conf > serveronly.crt
+$ ./emca.py emca.conf > server.crt
 
 It is recommended to create a dedicated non-privileged user for running the
 ACME client, and only provision the ACME challenge directory temporarily (using
